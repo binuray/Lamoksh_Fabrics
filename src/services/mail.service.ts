@@ -91,8 +91,12 @@ export async function sendPasswordChangedEmail(toEmail: string, userName: string
 
 export async function sendOrderConfirmationEmail(orderData: any): Promise<void> {
   try {
+    const toEmail = orderData.customer?.email || orderData.customerEmail;
+    if (!toEmail) {
+      return;
+    }
+
     const transporter = await createMailTransporter();
-    const toEmail = orderData.customerEmail;
     const itemsHtml = orderData.items
       .map(
         (item: any) => `
@@ -112,12 +116,14 @@ export async function sendOrderConfirmationEmail(orderData: any): Promise<void> 
       .join('');
 
     const addr = orderData.shippingAddress;
-    const addressHtml = `
-      ${addr.name}<br/>
-      ${addr.address}<br/>
-      ${addr.homeTown}, ${addr.city}, ${addr.state} - ${addr.pincode}<br/>
-      Mobile: ${addr.mobileNumber}
-    `;
+    const addressParts = [
+      addr?.address,
+      addr?.landmark ? `Landmark: ${addr.landmark}` : null,
+      addr?.district ? `District: ${addr.district}` : null,
+      [addr?.homeTown, addr?.city, addr?.state].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ') + (addr?.pincode ? ` - ${addr.pincode}` : ''),
+      `Mobile: ${addr?.mobileNumber || orderData.customerMobile}`,
+    ].filter(Boolean);
+    const addressHtml = `${addr?.name || orderData.customerName}<br/>` + addressParts.join('<br/>');
 
     const mailOptions = {
       from: env.SMTP_FROM,
@@ -128,7 +134,8 @@ export async function sendOrderConfirmationEmail(orderData: any): Promise<void> 
           <h2 style="color: #2c3e50; margin-bottom: 5px;">Order Confirmation</h2>
           <p style="color: #7f8c8d; font-size: 14px; margin-top: 0;">Thank you for your order, <strong>${orderData.customerName}</strong>!</p>
           <p>Order Number: <strong>${orderData.orderNumber}</strong><br/>
-          Order Date: <strong>${new Date(orderData.createdAt).toLocaleDateString('en-IN', { dateStyle: 'full' })}</strong></p>
+          Order Date: <strong>${new Date(orderData.createdAt).toLocaleDateString('en-IN', { dateStyle: 'full' })}</strong><br/>
+          Payment Method: <strong>${orderData.paymentMethod || 'CASH_ON_DELIVERY'}</strong></p>
           
           <h3 style="border-bottom: 2px solid #2c3e50; padding-bottom: 5px;">Order Items</h3>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
@@ -182,7 +189,8 @@ export async function sendAdminOrderNotificationEmail(orderData: any, adminEmail
           <h2>New Order Received: ${orderData.orderNumber}</h2>
           <p><strong>Customer Name:</strong> ${orderData.customerName}</p>
           <p><strong>Mobile:</strong> ${orderData.customerMobile}</p>
-          <p><strong>Email:</strong> ${orderData.customerEmail}</p>
+          <p><strong>Email:</strong> ${orderData.customer?.email || orderData.customerEmail || 'Not provided'}</p>
+          <p><strong>Payment Method:</strong> ${orderData.paymentMethod || 'CASH_ON_DELIVERY'}</p>
           <p><strong>Total Amount:</strong> ₹${orderData.totalAmount}</p>
           <p><strong>Items Count:</strong> ${orderData.items.length}</p>
           <p>Log in to admin dashboard for full details.</p>

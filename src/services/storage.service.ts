@@ -10,7 +10,7 @@ export interface StorageFileResult {
 }
 
 export interface StorageProvider {
-  uploadFile(file: Express.Multer.File, subfolder: 'images' | 'videos'): Promise<StorageFileResult>;
+  uploadFile(file: Express.Multer.File, subfolder?: string, parentFolder?: string): Promise<StorageFileResult>;
   deleteFile(key: string): Promise<void>;
   getFileUrl(key: string): string;
 }
@@ -22,8 +22,12 @@ export class LocalStorageService implements StorageProvider {
     this.uploadDir = path.resolve(process.cwd(), env.LOCAL_UPLOAD_DIR);
   }
 
-  async uploadFile(file: Express.Multer.File, subfolder: 'images' | 'videos'): Promise<StorageFileResult> {
-    const folderPath = path.join(this.uploadDir, 'products', subfolder);
+  async uploadFile(
+    file: Express.Multer.File,
+    subfolder: string = 'images',
+    parentFolder: string = 'products'
+  ): Promise<StorageFileResult> {
+    const folderPath = path.join(this.uploadDir, parentFolder, subfolder);
 
     if (!fs.existsSync(folderPath)) {
       fs.mkdirSync(folderPath, { recursive: true });
@@ -40,7 +44,7 @@ export class LocalStorageService implements StorageProvider {
 
     await fs.promises.writeFile(filePath, file.buffer);
 
-    const relativeKey = `products/${subfolder}/${safeFilename}`;
+    const relativeKey = `${parentFolder}/${subfolder}/${safeFilename}`;
     const url = `/uploads/${relativeKey}`;
 
     logger.info({ key: relativeKey, url }, 'File uploaded to Local Storage');
@@ -91,10 +95,14 @@ export class S3StorageService implements StorageProvider {
     });
   }
 
-  async uploadFile(file: Express.Multer.File, subfolder: 'images' | 'videos'): Promise<StorageFileResult> {
+  async uploadFile(
+    file: Express.Multer.File,
+    subfolder: string = 'images',
+    parentFolder: string = 'products'
+  ): Promise<StorageFileResult> {
     const originalExt = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
     const ext = originalExt || (subfolder === 'images' ? '.webp' : '.mp4');
-    const key = `products/${subfolder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`;
+    const key = `${parentFolder}/${subfolder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}${ext}`;
 
     const command = new PutObjectCommand({
       Bucket: this.bucket,

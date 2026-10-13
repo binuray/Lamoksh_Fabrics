@@ -9,17 +9,22 @@ import {
   sendAdminOrderNotificationEmail,
   sendGuestAccountCreatedEmail,
 } from './mail.service';
-import { OrderStatus, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus, PaymentMethod, ShipmentStatus } from '@prisma/client';
+import { formatShipmentResponse, createShipmentForOrder, cancelShipment } from './shipping.service';
 
 export interface CheckoutInput {
   name: string;
   mobileNumber: string;
-  email: string;
+  email?: string | null;
   address: string;
-  homeTown: string;
-  city: string;
+  fullAddress?: string | null;
+  landmark?: string | null;
+  district?: string | null;
+  homeTown?: string | null;
+  city?: string | null;
   state: string;
   pincode: string;
+  paymentMethod?: PaymentMethod;
 }
 
 export interface AdminOrderQueryOptions {
@@ -48,9 +53,10 @@ export function formatOrderResponse(order: any) {
     trackingToken: order.trackingToken,
     status: order.status,
     paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod || 'CASH_ON_DELIVERY',
     customer: {
       name: order.customerName,
-      email: order.customerEmail,
+      email: order.customerEmail || null,
       mobileNumber: order.customerMobile,
       customerType: order.userId ? 'USER' : 'GUEST',
       userId: order.userId || null,
@@ -74,14 +80,18 @@ export function formatOrderResponse(order: any) {
       ? {
           name: order.shippingAddress.name,
           mobileNumber: order.shippingAddress.mobileNumber,
-          email: order.shippingAddress.email,
+          email: order.shippingAddress.email || null,
           address: order.shippingAddress.address,
-          homeTown: order.shippingAddress.homeTown,
-          city: order.shippingAddress.city,
+          fullAddress: order.shippingAddress.fullAddress || order.shippingAddress.address,
+          landmark: order.shippingAddress.landmark || null,
+          district: order.shippingAddress.district || null,
+          homeTown: order.shippingAddress.homeTown || null,
+          city: order.shippingAddress.city || null,
           state: order.shippingAddress.state,
           pincode: order.shippingAddress.pincode,
         }
       : null,
+    shipment: order.shipment ? formatShipmentResponse(order.shipment) : null,
     subtotal: Number(order.subtotal),
     discount: Number(order.discount),
     shippingCharge: Number(order.shippingCharge),
@@ -93,9 +103,10 @@ export function formatOrderResponse(order: any) {
 }
 
 export async function createOrder(owner: CartOwner, input: CheckoutInput) {
-  const customerEmail = input.email.toLowerCase().trim();
+  const customerEmail = input.email ? input.email.toLowerCase().trim() : null;
   const customerMobile = input.mobileNumber.trim();
   const customerName = input.name.trim();
+  const paymentMethod = input.paymentMethod || PaymentMethod.CASH_ON_DELIVERY;
 
   let isNewAccountCreated = false;
 
@@ -205,14 +216,21 @@ export async function createOrder(owner: CartOwner, input: CheckoutInput) {
 
     if (!targetUserId) {
       // Check if user already exists
+      const orConditions: any[] = [{ mobile: customerMobile }];
+      if (customerEmail) {
+        orConditions.push({ email: customerEmail });
+      }
+
       const existingUser = await tx.user.findFirst({
         where: {
-          OR: [{ email: customerEmail }, { mobile: customerMobile }],
+          OR: orConditions,
         },
       });
 
-      if (!existingUser) {
-        // Create new USER account
+      if (existingUser) {
+        targetUserId = existingUser.id;
+      } else if (customerEmail) {
+        // Create new USER account ONLY if email is provided
         let userRole = await tx.role.findUnique({ where: { name: 'USER' } });
         if (!userRole) {
           userRole = await tx.role.create({
@@ -271,6 +289,7 @@ export async function createOrder(owner: CartOwner, input: CheckoutInput) {
         customerMobile,
         status: OrderStatus.PENDING,
         paymentStatus: PaymentStatus.PENDING,
+        paymentMethod,
         subtotal: calculatedSubtotal,
         discount,
         shippingCharge,
@@ -287,8 +306,11 @@ export async function createOrder(owner: CartOwner, input: CheckoutInput) {
         mobileNumber: customerMobile,
         email: customerEmail,
         address: input.address.trim(),
-        homeTown: input.homeTown.trim(),
-        city: input.city.trim(),
+        fullAddress: input.fullAddress ? input.fullAddress.trim() : input.address.trim(),
+        landmark: input.landmark ? input.landmark.trim() : null,
+        district: input.district ? input.district.trim() : null,
+        homeTown: input.homeTown ? input.homeTown.trim() : (input.district || input.city || null),
+        city: input.city ? input.city.trim() : (input.district || input.homeTown || null),
         state: input.state.trim(),
         pincode: input.pincode.trim(),
       },
@@ -337,29 +359,65 @@ export async function createOrder(owner: CartOwner, input: CheckoutInput) {
       where: { cartId: cart.id },
     });
 
+    // 9. Create initial Shipment record
+    await tx.shipment.create({
+      data: {
+        orderId: order.id,
+        status: ShipmentStatus.PENDING,
+        weight: env.SHIPROCKET_DEFAULT_WEIGHT || 0.5,
+        length: env.SHIPROCKET_DEFAULT_LENGTH || 10,
+        breadth: env.SHIPROCKET_DEFAULT_BREADTH || 10,
+        height: env.SHIPROCKET_DEFAULT_HEIGHT || 10,
+      },
+    });
+
     // Fetch complete created order for formatting
     const createdOrder = await tx.order.findUnique({
       where: { id: order.id },
       include: {
         items: true,
         shippingAddress: true,
+        shipment: true,
       },
     });
+
+    if (!createdOrder) {
+      throw new AppError('Failed to retrieve created order record', 500);
+    }
 
     return createdOrder;
   });
 
+  if (!orderResult) {
+    throw new AppError('Order transaction failed to return order data', 500);
+  }
+
+  // 10. Attempt Shiprocket order creation if auto-creation is enabled
+  if (env.SHIPROCKET_AUTO_CREATE_ORDER) {
+    try {
+      await createShipmentForOrder(orderResult.id);
+      const updatedShipment = await prisma.shipment.findUnique({ where: { orderId: orderResult.id } });
+      if (updatedShipment) {
+        orderResult.shipment = updatedShipment;
+      }
+    } catch {
+      // Local order is preserved if Shiprocket fails or credentials not configured
+    }
+  }
+
   const formattedResponse = formatOrderResponse(orderResult);
 
   // Send emails post-transaction asynchronously
-  sendOrderConfirmationEmail(formattedResponse).catch(() => {});
+  if (customerEmail) {
+    sendOrderConfirmationEmail(formattedResponse).catch(() => {});
+  }
 
   const notificationEmail = process.env.ORDER_NOTIFICATION_EMAIL || env.SMTP_USER;
   if (notificationEmail) {
     sendAdminOrderNotificationEmail(formattedResponse, notificationEmail).catch(() => {});
   }
 
-  if (isNewAccountCreated) {
+  if (isNewAccountCreated && customerEmail) {
     sendGuestAccountCreatedEmail(customerEmail, customerName).catch(() => {});
   }
 
@@ -375,6 +433,7 @@ export async function getUserOrders(userId: string, page = 1, limit = 10) {
       include: {
         items: true,
         shippingAddress: true,
+        shipment: true,
       },
       orderBy: { createdAt: 'desc' },
       skip,
@@ -400,6 +459,7 @@ export async function getUserOrderById(userId: string, orderId: string) {
     include: {
       items: true,
       shippingAddress: true,
+      shipment: true,
     },
   });
 
@@ -413,7 +473,7 @@ export async function getUserOrderById(userId: string, orderId: string) {
 export async function cancelUserOrder(userId: string, orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true, shippingAddress: true },
+    include: { items: true, shippingAddress: true, shipment: true },
   });
 
   if (!order || order.userId !== userId) {
@@ -448,9 +508,21 @@ export async function cancelUserOrder(userId: string, orderId: string) {
     return await tx.order.update({
       where: { id: orderId },
       data: { status: OrderStatus.CANCELLED },
-      include: { items: true, shippingAddress: true },
+      include: { items: true, shippingAddress: true, shipment: true },
     });
   });
+
+  if (order.shipment && order.shipment.status !== ShipmentStatus.CANCELLED) {
+    try {
+      await cancelShipment({ orderId });
+      const refreshedShipment = await prisma.shipment.findUnique({ where: { orderId } });
+      if (refreshedShipment) {
+        updatedOrder.shipment = refreshedShipment;
+      }
+    } catch {
+      // Ignore shipping cancel error on user order cancellation
+    }
+  }
 
   return formatOrderResponse(updatedOrder);
 }
@@ -461,6 +533,7 @@ export async function getGuestOrder(trackingToken: string) {
     include: {
       items: true,
       shippingAddress: true,
+      shipment: true,
     },
   });
 
@@ -504,6 +577,7 @@ export async function getAdminOrders(options: AdminOrderQueryOptions) {
       include: {
         items: true,
         shippingAddress: true,
+        shipment: true,
         user: { select: { id: true, name: true, email: true, mobile: true, role: true } },
       },
       orderBy,
@@ -530,6 +604,7 @@ export async function getAdminOrderById(orderId: string) {
     include: {
       items: true,
       shippingAddress: true,
+      shipment: true,
       user: { select: { id: true, name: true, email: true, mobile: true, role: true } },
     },
   });
@@ -581,6 +656,7 @@ export async function updateAdminOrderStatus(
     include: {
       items: true,
       shippingAddress: true,
+      shipment: true,
     },
   });
 
@@ -590,7 +666,7 @@ export async function updateAdminOrderStatus(
 export async function cancelAdminOrder(orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { items: true, shippingAddress: true },
+    include: { items: true, shippingAddress: true, shipment: true },
   });
 
   if (!order) {
@@ -625,9 +701,21 @@ export async function cancelAdminOrder(orderId: string) {
     return await tx.order.update({
       where: { id: orderId },
       data: { status: OrderStatus.CANCELLED },
-      include: { items: true, shippingAddress: true },
+      include: { items: true, shippingAddress: true, shipment: true },
     });
   });
+
+  if (order.shipment && order.shipment.status !== ShipmentStatus.CANCELLED) {
+    try {
+      await cancelShipment({ orderId });
+      const refreshedShipment = await prisma.shipment.findUnique({ where: { orderId } });
+      if (refreshedShipment) {
+        updatedOrder.shipment = refreshedShipment;
+      }
+    } catch {
+      // Ignore shipping cancel error on admin order cancellation
+    }
+  }
 
   return formatOrderResponse(updatedOrder);
 }

@@ -61,3 +61,48 @@ export function validateProductMediaFiles(req: Request, res: Response, next: Nex
 
   next();
 }
+
+const blogFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedFields = ['featuredImage', 'images', 'image'];
+  if (!allowedFields.includes(file.fieldname)) {
+    return cb(new AppError(`Unexpected field '${file.fieldname}' in upload request`, 400));
+  }
+  if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype) && file.mimetype !== 'image/gif') {
+    return cb(new AppError('Invalid image file format. Allowed: JPEG, JPG, PNG, WEBP, GIF', 400));
+  }
+  cb(null, true);
+};
+
+export const blogUpload = multer({
+  storage,
+  limits: {
+    fileSize: MAX_IMAGE_SIZE_BYTES,
+  },
+  fileFilter: blogFileFilter,
+});
+
+export const uploadBlogMediaFields = blogUpload.fields([
+  { name: 'featuredImage', maxCount: 1 },
+  { name: 'images', maxCount: 10 },
+]);
+
+export const uploadSingleBlogImage = blogUpload.single('image');
+
+export function validateBlogMediaFiles(req: Request, res: Response, next: NextFunction): void {
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+  const singleFile = req.file;
+
+  const featured = files?.featuredImage || [];
+  const images = files?.images || [];
+  const allImages = [...featured, ...images];
+  if (singleFile) allImages.push(singleFile);
+
+  for (const img of allImages) {
+    if (img.size > MAX_IMAGE_SIZE_BYTES) {
+      return next(new AppError('Image size must not exceed 50 MB', 413));
+    }
+  }
+
+  next();
+}
+

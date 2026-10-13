@@ -21,6 +21,7 @@ const envSchema = z.object({
   SMTP_PASSWORD: z.string().optional(),
   SMTP_FROM: z.string().default('no-reply@lamkosh.com'),
   CLIENT_URL: z.string().default('http://localhost:3000'),
+  ALLOWED_ORIGINS: z.string().optional(),
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   LOCAL_UPLOAD_DIR: z.string().default('uploads'),
   AWS_REGION: z.string().optional(),
@@ -28,6 +29,15 @@ const envSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_S3_BUCKET: z.string().optional(),
   ORDER_NOTIFICATION_EMAIL: z.string().optional(),
+  SHIPROCKET_EMAIL: z.string().optional(),
+  SHIPROCKET_PASSWORD: z.string().optional(),
+  SHIPROCKET_BASE_URL: z.string().default('https://apiv2.shiprocket.in/v1/external'),
+  SHIPROCKET_PICKUP_LOCATION: z.string().default('Primary'),
+  SHIPROCKET_DEFAULT_WEIGHT: z.string().transform((val) => (val ? parseFloat(val) : 0.5)).default('0.5'),
+  SHIPROCKET_DEFAULT_LENGTH: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),
+  SHIPROCKET_DEFAULT_BREADTH: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),
+  SHIPROCKET_DEFAULT_HEIGHT: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),
+  SHIPROCKET_AUTO_CREATE_ORDER: z.string().transform((val) => val === 'true' || val === '1').default('false'),
 });
 
 const _env = envSchema.safeParse(process.env);

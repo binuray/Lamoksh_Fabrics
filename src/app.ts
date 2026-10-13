@@ -10,6 +10,7 @@ import { errorHandler } from './middleware/error.middleware';
 import { apiLimiter } from './middleware/rateLimiter.middleware';
 import { logger } from './utils/logger';
 import { swaggerSpec } from './swagger';
+import { env } from './config/env';
 import { prisma } from './config/database';
 import { sendSuccess, sendError } from './utils/response';
 
@@ -22,16 +23,62 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Cross-Origin Resource Sharing
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://www.lamokshfabric.com',
+  'https://lamokshfabric.com',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+];
+
+if (env.CLIENT_URL) {
+  env.CLIENT_URL.split(',').forEach((url) => {
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (trimmed && !allowedOrigins.includes(trimmed)) {
+      allowedOrigins.push(trimmed);
+    }
+  });
+}
+
+if (env.ALLOWED_ORIGINS) {
+  env.ALLOWED_ORIGINS.split(',').forEach((url) => {
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (trimmed && !allowedOrigins.includes(trimmed)) {
+      allowedOrigins.push(trimmed);
+    }
+  });
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const normalizedOrigin = origin.replace(/\/+$/, '').toLowerCase();
+      const isAllowed = allowedOrigins.some(
+        (allowed) => allowed.replace(/\/+$/, '').toLowerCase() === normalizedOrigin
+      );
+
+      if (isAllowed) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    optionsSuccessStatus: 200,
   })
 );
 
-// Payload size limits to prevent DOS
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+// Payload size limits (supports rich blog content and articles)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // Structured HTTP logging (disabled terminal request logging for Postman/API calls)

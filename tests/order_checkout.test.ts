@@ -253,6 +253,76 @@ describe('Order, Checkout & Profile Implementation Test Suite', () => {
       expect(trackRes.body.success).toBe(true);
       expect(trackRes.body.data.orderNumber).toBe(placedOrder.orderNumber);
     });
+
+    it('8b. Guest checkout WITHOUT email (email is optional) with Landmark, District, Full Address & Cash on Delivery', async () => {
+      const guest2Id = `99999999-9999-4999-8999-999999999999`;
+      // 1. Add item to guest cart
+      await request(app)
+        .post('/api/v1/cart/items')
+        .set('X-Guest-ID', guest2Id)
+        .send({
+          productId: productNoVariant.id,
+          quantity: 1,
+        });
+
+      // 2. Checkout without email, with paymentOption: "cash on delivery", landmark, district, fullAddress
+      const res = await request(app)
+        .post('/api/v1/orders')
+        .set('X-Guest-ID', guest2Id)
+        .send({
+          name: 'No Email Buyer',
+          phone: '9812345678',
+          address: 'Plot 10, Industrial Area',
+          fullAddress: 'Plot 10, Industrial Area, Sector 5',
+          landmark: 'Opposite Water Tank',
+          district: 'Gautam Buddha Nagar',
+          state: 'Uttar Pradesh',
+          pincode: '201306',
+          paymentOption: 'cash on delivery',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      const order = res.body.data;
+      expect(order.customer.email).toBeNull();
+      expect(order.customer.mobileNumber).toBe('9812345678');
+      expect(order.customer.customerType).toBe('GUEST');
+      expect(order.paymentMethod).toBe('CASH_ON_DELIVERY');
+      expect(order.shippingAddress.landmark).toBe('Opposite Water Tank');
+      expect(order.shippingAddress.district).toBe('Gautam Buddha Nagar');
+      expect(order.shippingAddress.fullAddress).toBe('Plot 10, Industrial Area, Sector 5');
+      expect(order.shippingAddress.email).toBeNull();
+    });
+
+    it('8c. Guest checkout with paymentMethod: ONLINE', async () => {
+      const guest3Id = `88888888-8888-4888-8888-888888888888`;
+      await request(app)
+        .post('/api/v1/cart/items')
+        .set('X-Guest-ID', guest3Id)
+        .send({
+          productId: productNoVariant.id,
+          quantity: 1,
+        });
+
+      const res = await request(app)
+        .post('/api/v1/orders')
+        .set('X-Guest-ID', guest3Id)
+        .send({
+          name: 'Online Payment Buyer',
+          mobileNumber: '9822334455',
+          email: 'onlinebuyer@example.com',
+          address: 'Flat 402, Sunshine Apts',
+          landmark: 'Near City Mall',
+          district: 'Pune',
+          state: 'Maharashtra',
+          pincode: '411001',
+          paymentMethod: 'ONLINE',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.paymentMethod).toBe('ONLINE');
+    });
   });
 
   // ===================================================

@@ -34,6 +34,8 @@ model User {
   carts         Cart[]
   wishlists     Wishlist[]
   orders        Order[]
+  blogs         Blog[]
+  reviews       Review[]
 
   @@index([email])
   @@index([mobile])
@@ -157,6 +159,7 @@ model Product {
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
   orderItems    OrderItem[]
+  reviews       Review[]
 
   @@index([categoryId])
   @@index([name])
@@ -287,6 +290,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  ONLINE
+}
+
 model Order {
   id             String        @id @default(uuid()) @db.Uuid
   orderNumber    String        @unique @map("order_number") @db.VarChar(50)
@@ -297,10 +305,11 @@ model Order {
   guestEmail     String?       @map("guest_email") @db.VarChar(255)
   guestMobile    String?       @map("guest_mobile") @db.VarChar(20)
   customerName   String        @map("customer_name") @db.VarChar(100)
-  customerEmail  String        @map("customer_email") @db.VarChar(255)
+  customerEmail  String?       @map("customer_email") @db.VarChar(255)
   customerMobile String        @map("customer_mobile") @db.VarChar(20)
   status         OrderStatus   @default(PENDING)
   paymentStatus  PaymentStatus @default(PENDING) @map("payment_status")
+  paymentMethod  PaymentMethod @default(CASH_ON_DELIVERY) @map("payment_method")
   subtotal       Decimal       @db.Decimal(10, 2)
   discount       Decimal       @default(0) @db.Decimal(10, 2)
   shippingCharge Decimal       @default(0) @map("shipping_charge") @db.Decimal(10, 2)
@@ -311,6 +320,8 @@ model Order {
 
   items           OrderItem[]
   shippingAddress OrderAddress?
+  reviews         Review[]
+  shipment        Shipment?
 
   @@index([orderNumber])
   @@index([trackingToken])
@@ -319,6 +330,7 @@ model Order {
   @@index([customerMobile])
   @@index([status])
   @@index([paymentStatus])
+  @@index([paymentMethod])
   @@index([createdAt])
   @@map("orders")
 }
@@ -329,10 +341,13 @@ model OrderAddress {
   order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   name         String   @db.VarChar(100)
   mobileNumber String   @map("mobile_number") @db.VarChar(20)
-  email        String   @db.VarChar(255)
+  email        String?  @db.VarChar(255)
   address      String   @db.Text
-  homeTown     String   @map("home_town") @db.VarChar(100)
-  city         String   @db.VarChar(100)
+  fullAddress  String?  @map("full_address") @db.Text
+  landmark     String?  @db.VarChar(150)
+  district     String?  @db.VarChar(100)
+  homeTown     String?  @map("home_town") @db.VarChar(100)
+  city         String?  @db.VarChar(100)
   state        String   @db.VarChar(100)
   pincode      String   @db.VarChar(20)
   createdAt    DateTime @default(now()) @map("created_at")
@@ -366,4 +381,148 @@ model OrderItem {
   @@index([productId])
   @@index([variantId])
   @@map("order_items")
+}
+
+enum BlogStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Blog {
+  id               String      @id @default(uuid()) @db.Uuid
+  title            String      @db.VarChar(255)
+  slug             String      @unique @db.VarChar(255)
+  description      String      @db.Text
+  content          String      @db.Text
+  category         String      @db.VarChar(100)
+  tags             String[]    @default([])
+  author           String      @db.VarChar(100)
+  authorId         String?     @map("author_id") @db.Uuid
+  authorUser       User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  seoTitle         String?     @map("seo_title") @db.VarChar(255)
+  metaDescription  String?     @map("meta_description") @db.Text
+  keywords         String[]    @default([])
+  featuredImage    String?     @map("featured_image") @db.VarChar(500)
+  featuredImageKey String?     @map("featured_image_key") @db.VarChar(250)
+  featuredImageAlt String?     @map("featured_image_alt") @db.VarChar(255)
+  status           BlogStatus  @default(DRAFT)
+  publishedAt      DateTime?   @map("published_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  images           BlogImage[]
+
+  @@index([slug])
+  @@index([category])
+  @@index([status])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([publishedAt])
+  @@map("blogs")
+}
+
+model BlogImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  blogId     String?  @map("blog_id") @db.Uuid
+  blog       Blog?    @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  url        String   @db.VarChar(500)
+  storageKey String   @map("storage_key") @db.VarChar(250)
+  altText    String?  @map("alt_text") @db.VarChar(255)
+  isFeatured Boolean  @default(false) @map("is_featured")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([blogId])
+  @@map("blog_images")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Review {
+  id            String       @id @default(uuid()) @db.Uuid
+  userId        String       @map("user_id") @db.Uuid
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String       @map("product_id") @db.Uuid
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderId       String       @map("order_id") @db.Uuid
+  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  rating        Int
+  comment       String       @db.Text
+  status        ReviewStatus @default(PENDING)
+  adminFeedback String?      @map("admin_feedback") @db.Text
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  @@unique([userId, productId, orderId])
+  @@index([productId])
+  @@index([userId])
+  @@index([orderId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("reviews")
+}
+model Enquiry {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String?  @db.VarChar(100)
+  email        String?  @db.VarChar(255)
+  mobileNumber String?  @map("mobile_number") @db.VarChar(50)
+  message      String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([mobileNumber])
+  @@index([createdAt])
+  @@map("enquiries")
+}
+
+enum ShipmentStatus {
+  PENDING
+  ORDER_CREATED
+  AWB_ASSIGNED
+  PICKUP_SCHEDULED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+model Shipment {
+  id                   String          @id @default(uuid()) @db.Uuid
+  orderId              String          @unique @map("order_id") @db.Uuid
+  order                Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shiprocketOrderId    String?         @map("shiprocket_order_id") @db.VarChar(100)
+  shiprocketShipmentId String?         @map("shiprocket_shipment_id") @db.VarChar(100)
+  awbCode              String?         @map("awb_code") @db.VarChar(100)
+  courierName          String?         @map("courier_name") @db.VarChar(100)
+  courierId            Int?            @map("courier_id")
+  status               ShipmentStatus  @default(PENDING)
+  trackingUrl          String?         @map("tracking_url") @db.VarChar(500)
+  labelUrl             String?         @map("label_url") @db.VarChar(500)
+  manifestUrl          String?         @map("manifest_url") @db.VarChar(500)
+  pickupStatus         String?         @map("pickup_status") @db.VarChar(50)
+  pickupTokenNumber    String?         @map("pickup_token_number") @db.VarChar(100)
+  pickupScheduledDate  DateTime?       @map("pickup_scheduled_date")
+  lastTrackingUpdate   DateTime?       @map("last_tracking_update")
+  errorMessage         String?         @map("error_message") @db.Text
+  weight               Float?          @default(0.5)
+  length               Float?          @default(10)
+  breadth              Float?          @default(10)
+  height               Float?          @default(10)
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  @@index([orderId])
+  @@index([shiprocketOrderId])
+  @@index([shiprocketShipmentId])
+  @@index([awbCode])
+  @@index([status])
+  @@map("shipments")
 }

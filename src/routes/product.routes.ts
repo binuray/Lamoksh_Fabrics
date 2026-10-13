@@ -14,6 +14,12 @@ import { validateRequest } from '../middleware/validation.middleware';
 import { normalizeBody } from '../middleware/normalization.middleware';
 import { uploadProductMediaFields, validateProductMediaFiles } from '../middleware/upload.middleware';
 import { createProductSchema, updateProductSchema } from '../validators/product.validator';
+import {
+  getProductReviewsHandler,
+  getProductRatingSummaryHandler,
+  submitReviewHandler,
+} from '../controllers/review.controller';
+import { createReviewSchema } from '../validators/review.validator';
 
 export const adminProductRouter = Router();
 
@@ -51,3 +57,9 @@ export const publicProductRouter = Router();
 // Public Product Routes (No Auth)
 publicProductRouter.get('/', getPublicProductsHandler);
 publicProductRouter.get('/:id', getPublicProductByIdHandler);
+
+// Product Reviews & Ratings (Public view & Authenticated submit)
+publicProductRouter.get('/:productId/reviews', getProductReviewsHandler);
+publicProductRouter.get('/:productId/ratings', getProductRatingSummaryHandler);
+publicProductRouter.get('/:productId/reviews/summary', getProductRatingSummaryHandler);
+publicProductRouter.post('/:productId/reviews', authenticate, validateRequest(createReviewSchema), submitReviewHandler);
