@@ -7,7 +7,6 @@ import pinoHttp from 'pino-http';
 import swaggerUi from 'swagger-ui-express';
 import routes from './routes';
 import { errorHandler } from './middleware/error.middleware';
-import { apiLimiter } from './middleware/rateLimiter.middleware';
 import { logger } from './utils/logger';
 import { swaggerSpec } from './swagger';
 import { env } from './config/env';
@@ -83,9 +82,6 @@ app.use(cookieParser());
 
 // Structured HTTP logging (disabled terminal request logging for Postman/API calls)
 // app.use(pinoHttp({ logger }));
-
-// Rate limiting
-app.use('/api/', apiLimiter);
 
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
