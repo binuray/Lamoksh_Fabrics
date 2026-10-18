@@ -32,7 +32,7 @@ const envSchema = z.object({
   SHIPROCKET_EMAIL: z.string().optional(),
   SHIPROCKET_PASSWORD: z.string().optional(),
   SHIPROCKET_BASE_URL: z.string().default('https://apiv2.shiprocket.in/v1/external'),
-  SHIPROCKET_PICKUP_LOCATION: z.string().default('Primary'),
+  SHIPROCKET_PICKUP_LOCATION: z.string().default('Home'),
   SHIPROCKET_DEFAULT_WEIGHT: z.string().transform((val) => (val ? parseFloat(val) : 0.5)).default('0.5'),
   SHIPROCKET_DEFAULT_LENGTH: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),
   SHIPROCKET_DEFAULT_BREADTH: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),

@@ -93,8 +93,10 @@ export async function createShipmentForOrder(orderId: string, options: CreateShi
   const weight = options.weight || env.SHIPROCKET_DEFAULT_WEIGHT || 0.5;
   const length = options.length || env.SHIPROCKET_DEFAULT_LENGTH || 10;
   const breadth = options.breadth || env.SHIPROCKET_DEFAULT_BREADTH || 10;
-  const height = options.height || env.SHIPROCKET_DEFAULT_HEIGHT || 10;
-  const pickupLocation = options.pickupLocation || env.SHIPROCKET_PICKUP_LOCATION || 'Primary';
+  const pickupLocation =
+    (options.pickupLocation && options.pickupLocation !== 'Primary'
+      ? options.pickupLocation
+      : env.SHIPROCKET_PICKUP_LOCATION) || 'Home';
 
   // Customer Name splitting
   const rawName = (order.shippingAddress.name || order.customerName || 'Customer').trim();
@@ -107,7 +109,7 @@ export async function createShipmentForOrder(orderId: string, options: CreateShi
     name: item.productName.substring(0, 200),
     sku: item.variantId || item.productId || `ITEM-${item.id.substring(0, 8)}`,
     units: item.quantity,
-    selling_price: Number(item.unitSellPrice),
+    selling_price: Number((item as any).unitSellPrice || (item as any).unitPrice || 0),
     discount: 0,
     tax: Number(item.gst),
   }));
@@ -120,8 +122,8 @@ export async function createShipmentForOrder(orderId: string, options: CreateShi
     comment: `Lamkosh order ${order.orderNumber}`,
     billing_customer_name: firstName,
     billing_last_name: lastName,
-    billing_address: order.shippingAddress.address,
-    billing_address_2: order.shippingAddress.landmark || order.shippingAddress.district || '',
+    billing_address: order.shippingAddress.address.replace(/[\r\n]+/g, ', ').trim(),
+    billing_address_2: (order.shippingAddress.landmark || order.shippingAddress.district || '').replace(/[\r\n]+/g, ', ').trim(),
     billing_city: order.shippingAddress.city || order.shippingAddress.district || order.shippingAddress.homeTown || 'City',
     billing_pincode: pincode,
     billing_state: order.shippingAddress.state,
