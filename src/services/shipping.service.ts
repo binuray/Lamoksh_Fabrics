@@ -93,6 +93,7 @@ export async function createShipmentForOrder(orderId: string, options: CreateShi
   const weight = options.weight || env.SHIPROCKET_DEFAULT_WEIGHT || 0.5;
   const length = options.length || env.SHIPROCKET_DEFAULT_LENGTH || 10;
   const breadth = options.breadth || env.SHIPROCKET_DEFAULT_BREADTH || 10;
+  const height = options.height || env.SHIPROCKET_DEFAULT_HEIGHT || 10;
   const pickupLocation =
     (options.pickupLocation && options.pickupLocation !== 'Primary'
       ? options.pickupLocation
