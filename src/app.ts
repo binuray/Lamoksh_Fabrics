@@ -12,6 +12,7 @@ import { swaggerSpec } from './swagger';
 import { env } from './config/env';
 import { prisma } from './config/database';
 import { sendSuccess, sendError } from './utils/response';
+import paymentRouter from './routes/payment.routes';
 
 const app: Application = express();
 
@@ -102,6 +103,7 @@ app.get('/health/db', async (req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/v1', routes);
+app.use('/api', paymentRouter);
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

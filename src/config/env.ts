@@ -38,6 +38,8 @@ const envSchema = z.object({
   SHIPROCKET_DEFAULT_BREADTH: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),
   SHIPROCKET_DEFAULT_HEIGHT: z.string().transform((val) => (val ? parseFloat(val) : 10)).default('10'),
   SHIPROCKET_AUTO_CREATE_ORDER: z.string().transform((val) => val === 'true' || val === '1').default('false'),
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

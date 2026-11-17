@@ -11,6 +11,7 @@ import { adminBlogRouter, publicBlogRouter } from './blog.routes';
 import { customerReviewRouter, adminReviewRouter } from './review.routes';
 import { adminEnquiryRouter, publicEnquiryRouter } from './enquiry.routes';
 import { adminShippingRouter, publicShippingRouter } from './shipping.routes';
+import paymentRouter from './payment.routes';
 
 const router = Router();
 
@@ -49,6 +50,11 @@ router.use('/admin/enquiries', adminEnquiryRouter);
 router.use('/admin/contact', adminEnquiryRouter);
 router.use('/enquiries', publicEnquiryRouter);
 router.use('/contact', publicEnquiryRouter);
+
+// Razorpay Payment APIs
+router.use('/payment', paymentRouter);
+router.use('/payments', paymentRouter);
+router.use('/', paymentRouter);
 
 export default router;
 

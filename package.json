@@ -34,6 +34,7 @@
     "nodemailer": "^6.9.16",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
+    "razorpay": "^2.9.8",
     "sanitize-html": "^2.17.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
